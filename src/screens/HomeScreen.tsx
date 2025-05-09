@@ -69,6 +69,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.listContainer}
         />
       )}
+      <Text style={styles.footerText}>Powered by Dynamic.IO</Text>
       <FAB
         style={styles.fab}
         icon="plus"
@@ -108,5 +109,15 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: theme.colors.primary,
+  },
+  footerText: {
+    position: 'absolute',
+    bottom: theme.spacing.md,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    color: theme.colors.text,
+    opacity: 0.5,
+    fontSize: 12,
   },
 }); 
