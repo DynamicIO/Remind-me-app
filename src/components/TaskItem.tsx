@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Text, Checkbox, IconButton } from 'react-native-paper';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../theme';
 import { Task } from '../types';
 
@@ -24,18 +25,28 @@ export default function TaskItem({ task, onToggleComplete, onDelete }: TaskItemP
     }
   };
 
+  const handleToggleComplete = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onToggleComplete();
+  };
+
+  const handleDelete = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    onDelete();
+  };
+
   return (
     <TouchableOpacity
       style={[
         styles.container,
         { borderLeftColor: getPriorityColor() }
       ]}
-      onPress={onToggleComplete}
+      onPress={handleToggleComplete}
     >
       <View style={styles.content}>
         <Checkbox
           status={task.completed ? 'checked' : 'unchecked'}
-          onPress={onToggleComplete}
+          onPress={handleToggleComplete}
           color={theme.colors.primary}
         />
         <View style={styles.textContainer}>
@@ -55,7 +66,7 @@ export default function TaskItem({ task, onToggleComplete, onDelete }: TaskItemP
           icon="delete"
           iconColor={theme.colors.error}
           size={20}
-          onPress={onDelete}
+          onPress={handleDelete}
           style={styles.deleteButton}
         />
       </View>

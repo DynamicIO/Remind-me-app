@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { Text, FAB } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../theme';
 import { Task } from '../types';
 import TaskItem from '../components/TaskItem';
@@ -43,9 +44,35 @@ export default function HomeScreen() {
   };
 
   const deleteTask = async (taskId: string) => {
-    const updatedTasks = tasks.filter(task => task.id !== taskId);
-    setTasks(updatedTasks);
-    await AsyncStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    try {
+      // Find the task to delete
+      const taskToDelete = tasks.find(task => task.id === taskId);
+      if (!taskToDelete) return;
+
+      // Add deletedAt timestamp
+      const deletedTask = {
+        ...taskToDelete,
+        deletedAt: new Date().toISOString(),
+      };
+
+      // Save to deleted tasks
+      const storedDeletedTasks = await AsyncStorage.getItem('deletedTasks');
+      const deletedTasks = storedDeletedTasks ? JSON.parse(storedDeletedTasks) : [];
+      const updatedDeletedTasks = [deletedTask, ...deletedTasks];
+      await AsyncStorage.setItem('deletedTasks', JSON.stringify(updatedDeletedTasks));
+
+      // Remove from active tasks
+      const updatedTasks = tasks.filter(task => task.id !== taskId);
+      setTasks(updatedTasks);
+      await AsyncStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const handleAddTaskPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('AddTask');
   };
 
   return (
@@ -73,7 +100,7 @@ export default function HomeScreen() {
       <FAB
         style={styles.fab}
         icon="plus"
-        onPress={() => navigation.navigate('AddTask')}
+        onPress={handleAddTaskPress}
       />
     </View>
   );

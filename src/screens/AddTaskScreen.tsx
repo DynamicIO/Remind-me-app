@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 're
 import { TextInput, Button, SegmentedButtons } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { theme } from '../theme';
 import { Task } from '../types';
 import { RootStackParamList } from '../../App';
@@ -16,6 +17,8 @@ export default function AddTaskScreen() {
 
   const handleAddTask = async () => {
     if (!title.trim()) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     const newTask: Task = {
       id: Date.now().toString(),
@@ -34,6 +37,11 @@ export default function AddTaskScreen() {
     } catch (error) {
       console.error('Error saving task:', error);
     }
+  };
+
+  const handlePriorityChange = (value: Priority) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPriority(value);
   };
 
   return (
@@ -69,7 +77,7 @@ export default function AddTaskScreen() {
           <View style={styles.priorityContainer}>
             <SegmentedButtons
               value={priority}
-              onValueChange={(value: Priority) => setPriority(value)}
+              onValueChange={handlePriorityChange}
               buttons={[
                 {
                   value: 'low',

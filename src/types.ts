@@ -4,4 +4,5 @@ export interface Task {
   priority: 'low' | 'medium' | 'high';
   completed: boolean;
   createdAt: string;
+  deletedAt?: string;
 } 
