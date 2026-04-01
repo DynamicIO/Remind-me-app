@@ -1,19 +1,21 @@
 {
   "expo": {
-    "name": "TaskReminder",
+    "name": "Dynamic Tasks",
     "slug": "TaskReminder",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/Dynamic Tasks App Icon.png",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/Dynamic Tasks App Icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0D0D12"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.abrahabe.dynamictasks",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
