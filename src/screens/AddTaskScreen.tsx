@@ -29,7 +29,7 @@ export default function AddTaskScreen() {
   const [title,       setTitle]       = useState('');
   const [description, setDescription] = useState('');
   const [priority,    setPriority]    = useState<Priority>('medium');
-  const [category,    setCategory]    = useState<string>('Personal');
+  const [category,    setCategory]    = useState<string | null>(null);
 
   const navigation = useNavigation();
   const route = useRoute<RouteProp<RootStackParamList, 'AddTask'>>();
@@ -53,7 +53,7 @@ export default function AddTaskScreen() {
           setTitle(task.title);
           setDescription(task.description || '');
           setPriority(task.priority);
-          setCategory(task.category || 'Personal');
+          setCategory(task.category || null);
         }
       }
     } catch (e) {
@@ -71,7 +71,7 @@ export default function AddTaskScreen() {
       if (isEditing) {
         const updated = tasks.map(t =>
           t.id === taskId
-            ? { ...t, title: title.trim(), description: description.trim() || undefined, priority, category }
+            ? { ...t, title: title.trim(), description: description.trim() || undefined, priority, category: category || undefined }
             : t
         );
         await AsyncStorage.setItem('tasks', JSON.stringify(updated));
@@ -81,7 +81,7 @@ export default function AddTaskScreen() {
           title: title.trim(),
           description: description.trim() || undefined,
           priority,
-          category,
+          category: category || undefined,
           completed: false,
           createdAt: new Date().toISOString(),
         };
@@ -184,7 +184,7 @@ export default function AddTaskScreen() {
 
         {/* Category */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Category</Text>
+          <Text style={styles.sectionLabel}>Category <Text style={styles.sectionLabelOptional}>(optional)</Text></Text>
           <View style={styles.categoryGrid}>
             {CATEGORIES.map(cat => {
               const color  = CATEGORY_COLORS[cat];
@@ -200,7 +200,7 @@ export default function AddTaskScreen() {
                   ]}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setCategory(cat);
+                    setCategory(prev => prev === cat ? null : cat);
                   }}
                 >
                   <Text style={[
@@ -285,6 +285,14 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
+  },
+  sectionLabelOptional: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: theme.colors.textMuted,
+    opacity: 0.6,
+    textTransform: 'none',
+    letterSpacing: 0,
   },
   categoryGrid: {
     flexDirection: 'row',
