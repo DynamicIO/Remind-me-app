@@ -4,11 +4,11 @@
     "slug": "TaskReminder",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/Dynamic Tasks App Icon.png",
+    "icon": "./assets/Dynamic Tasks App Icon updated.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/Dynamic Tasks App Icon.png",
+      "image": "./assets/Dynamic Tasks App Icon updated.png",
       "resizeMode": "contain",
       "backgroundColor": "#0D0D12"
     },
