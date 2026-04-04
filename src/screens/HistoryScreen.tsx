@@ -138,7 +138,6 @@ export default function HistoryScreen() {
           />
         </>
       )}
-      <Text style={styles.footer}>Powered by Dynamic.IO</Text>
     </View>
   );
 }
@@ -222,15 +221,5 @@ const styles = StyleSheet.create({
   restoreBtnLabel: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  footer: {
-    position: 'absolute',
-    bottom: theme.spacing.md,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: theme.colors.textMuted,
-    opacity: 0.35,
-    fontSize: 11,
   },
 });

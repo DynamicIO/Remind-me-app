@@ -19,6 +19,7 @@ import { theme } from './src/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import AddTaskScreen from './src/screens/AddTaskScreen';
+import { requestNotificationPermissions } from './src/notifications';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -178,6 +179,10 @@ function SplashScreen({ onDone }: { onDone: () => void }) {
 
 export default function App() {
   const [splashVisible, setSplashVisible] = useState(true);
+
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
 
   // Fade-in for the app content
   const appOpacity = useSharedValue(0);

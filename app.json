@@ -27,6 +27,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/Dynamic Tasks App Icon updated.png",
+          "color": "#7C6FE0",
+          "androidMode": "default"
+        }
+      ]
+    ]
   }
 }

@@ -1,5 +1,15 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Text,
+  TextInput,
+  Animated as RNAnimated,
+  Easing as RNEasing,
+  Dimensions,
+} from 'react-native';
 import { FAB } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,13 +17,24 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+import ConfettiCannon from 'react-native-confetti-cannon';
 import { theme } from '../theme';
 import { Task, CATEGORIES, CATEGORY_COLORS } from '../types';
 import TaskItem from '../components/TaskItem';
 import { RootStackParamList } from '../../App';
+import { cancelTaskReminder } from '../notifications';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList>;
 type StatusFilter = 'all' | 'active' | 'done';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const PRIORITY_FILTERS = [
   { value: 'high',   label: 'High', color: theme.colors.priority.high },
@@ -21,11 +42,41 @@ const PRIORITY_FILTERS = [
   { value: 'low',    label: 'Low',  color: theme.colors.priority.low },
 ];
 
+// ─── Animated entrance wrapper for each task row ─────────────────────────────
+
+function AnimatedTaskRow({ index, children }: { index: number; children: React.ReactNode }) {
+  const opacity    = useSharedValue(0);
+  const translateY = useSharedValue(14);
+
+  useEffect(() => {
+    const delay = Math.min(index, 10) * 45;
+    opacity.value    = withDelay(delay, withTiming(1, { duration: 270 }));
+    translateY.value = withDelay(delay, withTiming(0, { duration: 270, easing: Easing.out(Easing.quad) }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity:   opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return <Animated.View style={animStyle}>{children}</Animated.View>;
+}
+
+// ─── HomeScreen ───────────────────────────────────────────────────────────────
+
 export default function HomeScreen() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [statusFilter, setStatusFilter]     = useState<StatusFilter>('all');
+  const [tasks,          setTasks]          = useState<Task[]>([]);
+  const [statusFilter,   setStatusFilter]   = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [searchQuery,    setSearchQuery]    = useState('');
+  const [showConfetti,   setShowConfetti]   = useState(false);
+
+  // Progress bar animation (RN Animated for non-transform width)
+  const progressAnim = useRef(new RNAnimated.Value(0)).current;
+  const prevAllDoneRef = useRef(false);
+  const confettiRef = useRef<ConfettiCannon>(null);
 
   const navigation = useNavigation<NavProp>();
 
@@ -46,6 +97,33 @@ export default function HomeScreen() {
     await AsyncStorage.setItem('tasks', JSON.stringify(updated));
   };
 
+  // Animate progress bar whenever counts change
+  useEffect(() => {
+    const total = tasks.length;
+    const done  = tasks.filter(t => t.completed).length;
+    const target = total > 0 ? done / total : 0;
+    RNAnimated.timing(progressAnim, {
+      toValue: target,
+      duration: 600,
+      easing: RNEasing.out(RNEasing.quad),
+      useNativeDriver: false,
+    }).start();
+  }, [tasks]);
+
+  // Detect transition to 100% completion and fire confetti
+  useEffect(() => {
+    if (tasks.length === 0) {
+      prevAllDoneRef.current = false;
+      return;
+    }
+    const allDone = tasks.every(t => t.completed);
+    if (allDone && !prevAllDoneRef.current) {
+      setShowConfetti(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    prevAllDoneRef.current = allDone;
+  }, [tasks]);
+
   const toggleTaskCompletion = async (taskId: string) => {
     const updated = tasks.map(t =>
       t.id === taskId ? { ...t, completed: !t.completed } : t
@@ -58,6 +136,7 @@ export default function HomeScreen() {
     try {
       const taskToDelete = tasks.find(t => t.id === taskId);
       if (!taskToDelete) return;
+      if (taskToDelete.dueDate) await cancelTaskReminder(taskId);
       const deletedTask = { ...taskToDelete, deletedAt: new Date().toISOString() };
       const storedDeleted = await AsyncStorage.getItem('deletedTasks');
       const deletedTasks = storedDeleted ? JSON.parse(storedDeleted) : [];
@@ -71,6 +150,7 @@ export default function HomeScreen() {
   };
 
   const handleDragEnd = async ({ data }: { data: Task[] }) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setTasks(data);
     await saveTasks(data);
   };
@@ -86,34 +166,55 @@ export default function HomeScreen() {
   };
 
   const isFiltering =
-    statusFilter !== 'all' || priorityFilter !== null || categoryFilter !== null;
+    statusFilter !== 'all' || priorityFilter !== null || categoryFilter !== null || searchQuery.trim().length > 0;
 
   const filteredTasks = tasks.filter(task => {
     if (statusFilter === 'active' && task.completed)  return false;
     if (statusFilter === 'done'   && !task.completed) return false;
     if (priorityFilter && task.priority !== priorityFilter) return false;
     if (categoryFilter && (task.category || 'Other') !== categoryFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const inTitle = task.title.toLowerCase().includes(q);
+      const inDesc  = task.description?.toLowerCase().includes(q) ?? false;
+      if (!inTitle && !inDesc) return false;
+    }
     return true;
   });
 
   const activeCount = tasks.filter(t => !t.completed).length;
   const doneCount   = tasks.filter(t =>  t.completed).length;
 
-  const renderItem = ({ item, drag, isActive }: RenderItemParams<Task>) => (
+  const renderItem = ({ item, drag, isActive, getIndex }: RenderItemParams<Task>) => (
     <ScaleDecorator>
-      <TaskItem
-        task={item}
-        onToggleComplete={() => toggleTaskCompletion(item.id)}
-        onDelete={() => deleteTask(item.id)}
-        drag={isFiltering ? undefined : drag}
-        isActive={isActive}
-        onEdit={() => handleEditTask(item.id)}
-      />
+      <AnimatedTaskRow index={getIndex?.() ?? 0}>
+        <TaskItem
+          task={item}
+          onToggleComplete={() => toggleTaskCompletion(item.id)}
+          onDelete={() => deleteTask(item.id)}
+          drag={isFiltering ? undefined : drag}
+          isActive={isActive}
+          onEdit={() => handleEditTask(item.id)}
+        />
+      </AnimatedTaskRow>
     </ScaleDecorator>
   );
 
+  const progressWidth = progressAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0, SCREEN_WIDTH],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View style={styles.container}>
+
+      {/* Progress bar */}
+      {tasks.length > 0 && (
+        <View style={styles.progressTrack}>
+          <RNAnimated.View style={[styles.progressFill, { width: progressWidth }]} />
+        </View>
+      )}
 
       {/* Stats bar */}
       {tasks.length > 0 && (
@@ -123,6 +224,32 @@ export default function HomeScreen() {
             {'  ·  '}
             <Text style={styles.statsDone}>{doneCount}</Text> done
           </Text>
+          {tasks.length > 0 && (
+            <Text style={styles.statsPercent}>
+              {tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0}%
+            </Text>
+          )}
+        </View>
+      )}
+
+      {/* Search bar */}
+      {tasks.length > 0 && (
+        <View style={styles.searchContainer}>
+          <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.textMuted} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search tasks..."
+            placeholderTextColor={theme.colors.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            selectionColor={theme.colors.primary}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSearchQuery(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -187,7 +314,7 @@ export default function HomeScreen() {
 
             {/* Categories */}
             {CATEGORIES.map(cat => {
-              const color = CATEGORY_COLORS[cat];
+              const color  = CATEGORY_COLORS[cat];
               const active = categoryFilter === cat;
               return (
                 <TouchableOpacity
@@ -219,9 +346,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.clearBtn}
               onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 setStatusFilter('all');
                 setPriorityFilter(null);
                 setCategoryFilter(null);
+                setSearchQuery('');
               }}
             >
               <Text style={styles.clearBtnText}>Clear</Text>
@@ -249,13 +378,15 @@ export default function HomeScreen() {
           ) : (
             <>
               <MaterialCommunityIcons
-                name="filter-outline"
+                name={searchQuery ? 'magnify' : 'filter-outline'}
                 size={56}
                 color={theme.colors.textMuted}
                 style={{ opacity: 0.4, marginBottom: 16 }}
               />
               <Text style={styles.emptyTitle}>No matches</Text>
-              <Text style={styles.emptySubtitle}>Try adjusting your filters</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? `No tasks matching "${searchQuery}"` : 'Try adjusting your filters'}
+              </Text>
             </>
           )}
         </View>
@@ -269,14 +400,34 @@ export default function HomeScreen() {
         />
       )}
 
-      {isFiltering && (
+      {isFiltering && filteredTasks.length > 0 && (
         <View style={styles.dragHint}>
           <Text style={styles.dragHintText}>Clear filters to reorder</Text>
         </View>
       )}
 
-      <Text style={styles.footer}>Powered by Dynamic.IO</Text>
       <FAB style={styles.fab} icon="plus" onPress={handleAddTask} />
+
+      {showConfetti && (
+        <ConfettiCannon
+          ref={confettiRef}
+          count={150}
+          origin={{ x: SCREEN_WIDTH / 2, y: -20 }}
+          autoStart
+          fadeOut
+          fallSpeed={3000}
+          explosionSpeed={350}
+          colors={[
+            theme.colors.primary,
+            theme.colors.secondary,
+            theme.colors.priority.high,
+            theme.colors.priority.medium,
+            '#FBBF24',
+            '#C084FC',
+          ]}
+          onAnimationEnd={() => setShowConfetti(false)}
+        />
+      )}
     </View>
   );
 }
@@ -286,7 +437,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  progressTrack: {
+    height: 3,
+    backgroundColor: theme.colors.border,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 2,
+  },
   statsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
     paddingTop: 10,
     paddingBottom: 4,
@@ -303,12 +467,43 @@ const styles = StyleSheet.create({
     color: theme.colors.priority.low,
     fontWeight: '700',
   },
+  statsPercent: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+    opacity: 0.7,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: theme.spacing.md,
+    marginTop: 6,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 8,
+  },
+  searchIcon: {
+    flexShrink: 0,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.text,
+    padding: 0,
+    margin: 0,
+  },
   filterWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
+    marginTop: 6,
   },
   filterBar: {
     paddingHorizontal: theme.spacing.md,
@@ -354,7 +549,7 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: theme.spacing.md,
-    paddingBottom: 90,
+    paddingBottom: 140,
   },
   emptyContainer: {
     flex: 1,
@@ -393,15 +588,5 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: theme.colors.primary,
-  },
-  footer: {
-    position: 'absolute',
-    bottom: theme.spacing.md + 2,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: theme.colors.textMuted,
-    opacity: 0.4,
-    fontSize: 11,
   },
 });

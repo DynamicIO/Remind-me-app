@@ -4,7 +4,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { theme } from '../theme';
-import { Task, CATEGORY_COLORS } from '../types';
+import { Task, CATEGORY_COLORS, formatDueDate, isDueOverdue } from '../types';
 
 interface TaskItemProps {
   task: Task;
@@ -74,6 +74,12 @@ export default function TaskItem({
 
   const priorityColor = getPriorityColor();
   const categoryColor = task.category ? (CATEGORY_COLORS[task.category] ?? theme.colors.textMuted) : null;
+  const overdue = !task.completed && task.dueDate ? isDueOverdue(task.dueDate) : false;
+  const dueDateLabel = task.dueDate ? formatDueDate(task.dueDate) : null;
+
+  const handleSwipeOpen = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
 
   return (
     <Swipeable
@@ -85,6 +91,7 @@ export default function TaskItem({
       rightThreshold={60}
       overshootLeft={false}
       overshootRight={false}
+      onSwipeableWillOpen={handleSwipeOpen}
     >
       <View style={[styles.card, isActive && styles.cardActive]}>
         {/* Priority accent bar */}
@@ -97,7 +104,10 @@ export default function TaskItem({
         >
           {drag && (
             <TouchableOpacity
-              onLongPress={drag}
+              onLongPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                drag();
+              }}
               delayLongPress={150}
               style={styles.dragHandle}
               hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
@@ -154,13 +164,29 @@ export default function TaskItem({
                   </Text>
                 </View>
               ) : null}
+
+              {dueDateLabel && !task.completed ? (
+                <View style={[styles.badge, { backgroundColor: overdue ? theme.colors.error + '22' : theme.colors.primary + '22', flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                  <MaterialCommunityIcons
+                    name={overdue ? 'alarm' : 'calendar-outline'}
+                    size={9}
+                    color={overdue ? theme.colors.error : theme.colors.primary}
+                  />
+                  <Text style={[styles.badgeText, { color: overdue ? theme.colors.error : theme.colors.primary }]}>
+                    {dueDateLabel}
+                  </Text>
+                </View>
+              ) : null}
             </View>
           </View>
 
           {drag && onEdit ? (
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={onEdit}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onEdit();
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <MaterialCommunityIcons
